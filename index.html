@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Coal for Christmas</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="topbar">
+      <div class="pill" id="levelName"></div>
+      <div class="pill">Wave <b id="wave">0</b>/<b id="waves">0</b></div>
+      <div class="pill deliver">
+        <span>🎁 Delivered <b id="delivered">0</b>/100</span>
+        <div class="bar"><div id="deliverBar"></div></div>
+      </div>
+      <div class="pill coal"><span class="lump"></span><b id="coal">0</b> coal</div>
+      <div class="spacer"></div>
+      <button id="speedBtn" class="btn small">1×</button>
+      <button id="menuBtn" class="btn small">Levels</button>
+    </div>
+
+    <div id="hint"></div>
+
+    <div id="bottombar">
+      <div id="towers"></div>
+      <div id="side">
+        <div id="snowball" class="pill">❄ Snowball <span id="snowState">ready</span></div>
+        <button id="waveBtn" class="btn big">Start wave</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="floats"></div>
+
+  <div id="overlay">
+    <div class="card">
+      <img id="portrait" alt="" />
+      <h1 id="ovTitle">Coal for Christmas</h1>
+      <p id="ovText"></p>
+      <div id="levelBtns"></div>
+      <p class="how">Pick a gadget below, click a tile to place it. Path gadgets go <b>on</b> the path, shooters go <b>beside</b> it.
+        Click anywhere with nothing selected to lob a snowball. Right-click a gadget to sell it. Keys: <b>1–5</b> pick, <b>Space</b> next wave, <b>Esc</b> cancel.</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
