@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Model viewer</title>
+  <style>
+    body { margin: 0; background: #dfeaf2; font-family: system-ui, sans-serif; }
+    nav { padding: 8px 12px; display: flex; gap: 12px; font-size: 14px; }
+    #grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+    figure { margin: 0; text-align: center; font-size: 12px; color: #456; }
+    img { width: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <nav><a href="?set=base">base (front 3/4)</a><a href="?set=side">base (side)</a><a href="?set=back">base (back 3/4)</a><a href="?set=upgrades">tower upgrades</a><a href="?set=hero">grump + chucker upgrades</a></nav>
+  <div id="grid"></div>
+  <script type="module" src="/src/viewer.js"></script>
+</body>
+</html>

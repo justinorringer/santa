@@ -102,16 +102,12 @@ export function flat(color, opts = {}) {
  *   build(group, body, helpers) -> add accessories
  * }
  */
-export function buildCharacter(spec) {
-  const [W, H, D] = spec.size;
-  const legH = spec.legs === false ? 0 : (spec.legs?.h ?? 0.2);
-  const group = new THREE.Group();
-  const paint = spec.paint || {};
-
+export function paintedBox(size, color, paint = {}, { taper = 0.92, seed = 1, colors } = {}) {
+  const [W, H, D] = size;
   const mats = FACES.map((face) => {
     const cv = makeCanvas();
     const ctx = cv.getContext('2d');
-    paintBase(ctx, spec.colors?.[face] ?? spec.color, face);
+    paintBase(ctx, colors?.[face] ?? color, face);
     const side = face !== 'top' && face !== 'bottom';
     ctx.save();
     ctx.scale(TEX, TEX); // painters work in 0..1, y down
@@ -122,10 +118,18 @@ export function buildCharacter(spec) {
     paintRim(ctx);
     return new THREE.MeshLambertMaterial({ map: texFrom(cv), flatShading: true });
   });
+  const m = new THREE.Mesh(wonkyBox(W, H, D, { taper, seed }), mats);
+  m.castShadow = true;
+  return m;
+}
 
-  const body = new THREE.Mesh(wonkyBox(W, H, D, { taper: spec.taper ?? 0.92, seed: spec.seed ?? 1 }), mats);
+export function buildCharacter(spec) {
+  const [W, H, D] = spec.size;
+  const legH = spec.legs === false ? 0 : (spec.legs?.h ?? 0.2);
+  const group = new THREE.Group();
+
+  const body = paintedBox(spec.size, spec.color, spec.paint || {}, { taper: spec.taper ?? 0.92, seed: spec.seed ?? 1, colors: spec.colors });
   body.position.y = legH + H / 2;
-  body.castShadow = true;
   body.name = 'body';
   group.add(body);
 
@@ -151,6 +155,91 @@ export function buildCharacter(spec) {
   return group;
 }
 
+const toneCache = {};
+/** Cached flat material: every part of the same colour shares one material. */
+export function tone(color) {
+  return (toneCache[color] ||= flat(color));
+}
+
+/** Chunky accessory block: a wonky box without the back taper (brows, muzzles, belts, cuffs...). */
+export const chunk = (w, h, d, seed = 1, taper = 1) => wonkyBox(w, h, d, { taper, seed, wonk: 0.03, bulge: 0.05, pinch: 0.08 });
+
+/**
+ * Runs `fn` with x squashed around the centre so circles painted on a w×h face stay round.
+ * Inside fn: y is still 0..1 (top→bottom), x = 0.5 is the centre, and one x unit == one y unit == h.
+ */
+export function squareFace(ctx, w, h, fn) {
+  ctx.save();
+  ctx.translate(0.5, 0);
+  ctx.scale(h / w, 1);
+  ctx.translate(-0.5, 0);
+  fn(ctx);
+  ctx.restore();
+}
+
+/**
+ * Two-block chibi figure: torso + separate head group (pivot at the neck) + feet with toe boxes.
+ * spec = {
+ *   torso: { size:[W,H,D], color, paint, seed, taper, colors, z, tilt },
+ *   head:  { size:[w,h,d], color, paint, seed, taper, colors, z, sink },   // sink = overlap into the torso
+ *   feet:  { size:[w,h,d], color, at:[[x,z],...], toe:[w,h,d]|undefined, toeColor, lift },
+ *   build(group, { head, skull, torso, feet, W,H,D, hw,hh,hd, hf, legH, top, neck, mid }),
+ *   height,   // optional; defaults to the measured top of the finished model
+ * }
+ * Head features go in the `head` group in head-local coords: y up from the neck, z = hf is the face.
+ * Every foot is a mesh named 'leg' (toe box is its child) so the game can bob position.y.
+ */
+export function buildFigure(spec) {
+  const T = spec.torso, Hd = spec.head, F = spec.feet || {};
+  const [W, H, D] = T.size;
+  const [hw, hh, hd] = Hd.size;
+  const [fw, fh, fd] = F.size ?? [W * 0.3, 0.26, D * 0.4];
+  const legH = F.lift ?? Math.max(0.06, fh - 0.1);
+  const group = new THREE.Group();
+
+  const torso = paintedBox(T.size, T.color, T.paint || {}, { taper: T.taper ?? 0.94, seed: T.seed ?? 1, colors: T.colors });
+  torso.position.set(0, legH + H / 2, T.z ?? 0);
+  if (T.tilt) torso.rotation.x = T.tilt;
+  torso.name = 'body';
+  group.add(torso);
+
+  const top = legH + H;
+  const neck = top - (Hd.sink ?? 0.05);
+  const head = new THREE.Group();
+  head.name = 'head';
+  head.position.set(0, neck, Hd.z ?? 0);
+  const skull = paintedBox(Hd.size, Hd.color, Hd.paint || {}, { taper: Hd.taper ?? 0.94, seed: Hd.seed ?? 2, colors: Hd.colors });
+  skull.position.y = hh / 2;
+  skull.name = 'skull';
+  head.add(skull);
+  group.add(head);
+
+  const footGeo = wonkyBox(fw, fh, fd, { taper: 1, bulge: 0.03, pinch: 0.1, seed: 5 });
+  const footMat = tone(F.color ?? shade(T.color, -0.18));
+  const toeGeo = F.toe ? wonkyBox(F.toe[0], F.toe[1], F.toe[2], { taper: 1, bulge: 0.04, pinch: 0.1, seed: 6 }) : null;
+  const toeMat = toeGeo ? tone(F.toeColor ?? F.color ?? shade(T.color, -0.18)) : null;
+  const feet = [];
+  for (const [x, z] of F.at ?? [[-W * 0.25, 0], [W * 0.25, 0]]) {
+    const leg = new THREE.Mesh(footGeo, footMat);
+    leg.position.set(x, fh / 2, z);
+    leg.castShadow = true;
+    leg.name = 'leg';
+    if (toeGeo) {
+      const toe = new THREE.Mesh(toeGeo, toeMat);
+      toe.position.set(0, -fh / 2 + F.toe[1] / 2, fd / 2 + F.toe[2] / 2 - 0.05);
+      toe.castShadow = true;
+      leg.add(toe);
+    }
+    group.add(leg);
+    feet.push(leg);
+  }
+
+  spec.build?.(group, { head, skull, torso, feet, W, H, D, hw, hh, hd, hf: hd / 2, legH, top, neck, mid: legH + H / 2 });
+  // top of the whole model (hat tips, antlers...) unless the spec pins it
+  group.userData.height = spec.height ?? Math.round(new THREE.Box3().setFromObject(group).max.y * 100) / 100;
+  return group;
+}
+
 // ---------- chunky accessory helpers ----------
 export function part(geo, color, x, y, z, rot, scale) {
   const m = new THREE.Mesh(geo, typeof color === 'object' && color.isMaterial ? color : flat(color));
@@ -165,6 +254,11 @@ export const cyl = (rt, rb, h, sides = 6) => new THREE.CylinderGeometry(rt, rb, 
 export const rock = (r, detail = 0) => new THREE.IcosahedronGeometry(r, detail);
 export const lump = (r) => new THREE.DodecahedronGeometry(r, 0);
 export const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+const glowCache = {};
+/** Self-lit flat material (embers, eyes, crystals). */
+export function glow(color, intensity = 0.9) {
+  return (glowCache[color + intensity] ||= new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: intensity, flatShading: true }));
+}
 
 // ---------- flat cartoon face helpers (canvas ctx scaled to 0..1) ----------
 export function circle(ctx, x, y, r, fill) {

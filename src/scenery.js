@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { wonkyBox, part, cone, cyl, rock, box, flat } from './kit.js';
+import { wonkyBox, part, cone, cyl, rock, box, flat, glow } from './kit.js';
 import { makeGift } from './models.js';
 
 export const COLS = 16;
@@ -307,37 +307,89 @@ export function buildTheme(level, path) {
 }
 
 // ---------------------------------------------------------------- path traps
-const beltCanvas = document.createElement('canvas'); beltCanvas.width = beltCanvas.height = 64;
-{
-  const ctx = beltCanvas.getContext('2d');
+const BELT_COLORS = ['#FFD23F', '#5BC8F5', '#FF5A4F', '#C77DFF'];
+export const beltTexs = BELT_COLORS.map((col) => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const ctx = cv.getContext('2d');
   ctx.fillStyle = '#34343C'; ctx.fillRect(0, 0, 64, 64);
-  ctx.strokeStyle = '#FFD23F'; ctx.lineWidth = 6; ctx.lineJoin = 'miter';
+  ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.lineJoin = 'miter';
   for (const y of [8, 40]) { ctx.beginPath(); ctx.moveTo(10, y); ctx.lineTo(32, y + 16); ctx.lineTo(54, y); ctx.stroke(); }
-}
-export const beltTex = new THREE.CanvasTexture(beltCanvas);
-beltTex.colorSpace = THREE.SRGBColorSpace; beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping;
-const beltMat = new THREE.MeshLambertMaterial({ map: beltTex });
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+});
+const beltMats = beltTexs.map((t) => new THREE.MeshLambertMaterial({ map: t }));
 
 /** Conveyor: chevrons point along local +z; rotate so +z is the push direction. */
-export function makeConveyor() {
+export function makeConveyor(level = 1) {
   const g = new THREE.Group();
   g.add(part(box(0.86, 0.1, 0.96), '#22222A', 0, 0.06, 0));
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.96), beltMat);
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.96), beltMats[level - 1]);
   top.rotation.x = -Math.PI / 2; top.position.y = 0.115;
   g.add(top);
-  for (const s of [-1, 1]) g.add(part(box(0.08, 0.16, 0.98), '#E63946', s * 0.4, 0.09, 0));
+  const rail = ['#E63946', '#3E7CB1', '#B5202B', '#6A2C91'][level - 1];
+  for (const s of [-1, 1]) g.add(part(box(0.08, 0.16 + (level - 1) * 0.03, 0.98), rail, s * 0.4, 0.09, 0));
   for (const z of [-0.48, 0.48]) g.add(part(cyl(0.07, 0.07, 0.8, 6), '#8D93A8', 0, 0.08, z, [0, 0, Math.PI / 2]));
+  if (level >= 2) for (const s of [-1, 1]) g.add(part(box(0.1, 0.1, 0.5), '#D5DCE8', s * 0.4, 0.22, 0)); // grease guards
+  if (level >= 3) { // reverse gear: warning lights + boosters
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      g.add(part(cyl(0.03, 0.03, 0.3, 5), '#22222A', sx * 0.4, 0.3, sz * 0.42));
+      const l = part(rock(0.07), glow('#FF3B30', 1), sx * 0.4, 0.48, sz * 0.42); l.castShadow = false; l.name = 'blink';
+      g.add(l);
+    }
+    for (const s of [-1, 1]) g.add(part(cone(0.1, 0.26, 5), '#F4C430', s * 0.4, 0.28, 0.3, [Math.PI / 2, 0, 0]));
+  }
+  if (level >= 4) { // shredder: toothed rollers
+    for (const z of [-0.26, 0.26]) {
+      const r = new THREE.Group(); r.name = 'rollx'; r.position.set(0, 0.2, z);
+      r.add(part(cyl(0.1, 0.1, 0.66, 6), '#8D93A8', 0, 0, 0, [0, 0, Math.PI / 2]));
+      for (let i = 0; i < 4; i++) for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI * 2 + i * 0.5;
+        r.add(part(cone(0.045, 0.14, 4), '#D5DCE8', -0.24 + i * 0.16, Math.cos(a) * 0.14, Math.sin(a) * 0.14, [a, 0, 0]));
+      }
+      g.add(r);
+    }
+  }
   return g;
 }
 
-export function makeSpikes() {
+export function makeSpikes(level = 1) {
   const g = new THREE.Group();
-  g.add(part(box(0.9, 0.07, 0.9), '#4A4E63', 0, 0.045, 0));
-  const steel = flat('#D5DCE8');
+  g.add(part(box(0.9, 0.07, 0.9), ['#4A4E63', '#4A4E63', '#3A6E8F', '#5A4A1E'][level - 1], 0, 0.045, 0));
   const sp = new THREE.Group(); sp.name = 'spikes';
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) sp.add(part(cone(0.085, 0.34, 4), steel, -0.27 + i * 0.27, 0.22, -0.27 + j * 0.27, [0, (i + j) * 0.7, 0]));
+  const mat = [flat('#D5DCE8'), flat('#D5DCE8'), glow('#8FDCFF', 0.55), glow('#F4C430', 0.35)][level - 1];
+  const h = [0.34, 0.5, 0.56, 0.6][level - 1];
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    const x = -0.27 + i * 0.27, z = -0.27 + j * 0.27;
+    if (level === 4 && i === 1 && j === 1) continue;
+    const geo = level === 3 ? new THREE.OctahedronGeometry(0.1) : cone(0.085, h, 4);
+    sp.add(part(geo, mat, x, h / 2 + 0.05, z, [0, (i + j) * 0.7, 0], level === 3 ? [1, h / 0.2, 1] : null));
+    if (level === 2) sp.add(part(cone(0.04, 0.16, 4), flat('#E63946'), x, h + 0.0, z));
+  }
   g.add(sp);
+  if (level === 4) { // grinder disc
+    const disc = new THREE.Group(); disc.name = 'spin'; disc.position.y = 0.2;
+    disc.add(part(cyl(0.2, 0.2, 0.08, 8), '#8D93A8', 0, 0, 0));
+    for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; disc.add(part(cone(0.06, 0.2, 4), glow('#F4C430', 0.35), Math.cos(a) * 0.26, 0, Math.sin(a) * 0.26, [0, -a, -Math.PI / 2])); }
+    g.add(disc);
+  }
   return g;
+}
+
+/** Pile of coal sitting on the path. setPile(pile, 0..1) shows how much is left. */
+export function makeCoalPile(hot) {
+  const g = new THREE.Group();
+  const cold = flat('#1F1F24');
+  const spots = [[0, 0.1, 0, 0.2], [-0.2, 0.08, 0.12, 0.15], [0.2, 0.08, -0.1, 0.16], [0.08, 0.07, 0.24, 0.13], [-0.12, 0.07, -0.22, 0.14], [0.02, 0.27, 0.02, 0.14]];
+  spots.forEach(([x, y, z, r], i) => {
+    const m = part(new THREE.DodecahedronGeometry(r, 0), hot && i % 2 === 0 ? glow('#FF8C1A', 0.9) : cold, x, y, z, [i, i * 2, i * 3]);
+    g.add(m);
+  });
+  return g;
+}
+export function setPile(g, ratio) {
+  const n = Math.max(1, Math.ceil(ratio * g.children.length));
+  g.children.forEach((c, i) => { c.visible = i < n; });
 }
 
 export function makeCloudPuff(s = 1) { return cloudPuff(rng(5), s); }

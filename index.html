@@ -28,13 +28,43 @@
     <div id="bottombar">
       <div id="towers"></div>
       <div id="side">
-        <div id="snowball" class="pill">❄ Snowball <span id="snowState">ready</span></div>
+        <button id="ultBtn" class="btn ult" title="Steal every present on the board, raid Santa's sack, and take 5 back from the pile"><span id="ultFill"></span><span class="lbl">🎁 Present Heist <kbd>Q</kbd></span></button>
         <button id="waveBtn" class="btn big">Start wave</button>
+      </div>
+    </div>
+
+    <div id="panel" class="hidden">
+      <div class="phead"><b id="pName"></b><span id="pPips"></span></div>
+      <div id="pStats"></div>
+      <div id="pNext"><b id="pNextName"></b><span id="pNextDesc"></span></div>
+      <div class="prow">
+        <button id="upBtn" class="btn up"></button>
+        <button id="sellBtn" class="btn sell"></button>
       </div>
     </div>
   </div>
 
+  <div id="flash"></div>
   <div id="floats"></div>
+
+  <div id="death" class="hidden">
+    <div id="rain"></div>
+    <div class="dcard">
+      <img id="deathSanta" alt="" />
+      <h1>HO HO NO.</h1>
+      <p id="deathSub"></p>
+      <div class="dstats">
+        <div><b id="dsWave">0</b><span>wave reached</span></div>
+        <div><b id="dsBroken">0</b><span>presents smashed</span></div>
+        <div><b id="dsTowers">0</b><span>gadgets built</span></div>
+        <div><b id="dsTime">0</b><span>survived</span></div>
+      </div>
+      <div class="drow">
+        <button id="retryBtn" class="btn big">Try again <kbd>R</kbd></button>
+        <button id="deathMenuBtn" class="btn">Levels</button>
+      </div>
+    </div>
+  </div>
 
   <div id="overlay">
     <div class="card">
@@ -42,8 +72,9 @@
       <h1 id="ovTitle">Coal for Christmas</h1>
       <p id="ovText"></p>
       <div id="levelBtns"></div>
-      <p class="how">Pick a gadget below, click a tile to place it. Path gadgets go <b>on</b> the path, shooters go <b>beside</b> it.
-        Click anywhere with nothing selected to lob a snowball. Right-click a gadget to sell it. Keys: <b>1–5</b> pick, <b>Space</b> next wave, <b>Esc</b> cancel.</p>
+      <p class="how">Pick a gadget, click a tile to place it. Traps go <b>on</b> the path, everything else <b>beside</b> it.
+        Click any gadget (or the Grump) to upgrade it. The Grump throws snowballs on his own.
+        Keys: <b>1–5</b> pick, <b>U</b> upgrade, <b>X</b> sell, <b>Q</b> heist, <b>Space</b> next wave, <b>Esc</b> cancel.</p>
     </div>
   </div>
 
