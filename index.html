@@ -19,31 +19,32 @@
       </div>
       <div class="pill coal"><span class="lump"></span><b id="coal">0</b> coal</div>
       <div class="spacer"></div>
-      <button id="speedBtn" class="btn small">1×</button>
-      <button id="menuBtn" class="btn small">Levels</button>
+      <button id="speedBtn" class="btn small" title="Game speed">1×</button>
     </div>
 
     <div id="hint"></div>
 
-    <div id="bottombar">
-      <div id="towers"></div>
-      <div id="side">
-        <button id="ultBtn" class="btn ult" title="Steal every present on the board, raid Santa's sack, and take 5 back from the pile"><span id="ultFill"></span><span class="lbl">🎁 Present Heist <kbd>Q</kbd></span></button>
-        <button id="waveBtn" class="btn big">Start wave</button>
-      </div>
+    <div id="boss" class="hidden">
+      <div class="bossname">SANTA <span id="bossHp"></span></div>
+      <div class="bosstrack"><div id="bossFill"></div></div>
     </div>
 
-    <div id="panel" class="hidden">
-      <div class="phead"><b id="pName"></b><span id="pPips"></span></div>
-      <div id="pStats"></div>
-      <div id="pNext"><b id="pNextName"></b><span id="pNextDesc"></span></div>
-      <div class="prow">
-        <button id="upBtn" class="btn up"></button>
-        <button id="sellBtn" class="btn sell"></button>
-      </div>
+    <div id="towers"></div>
+
+    <div id="corner">
+      <button id="ultBtn" class="round ult hidden">
+        <span class="glyph" id="ultGlyph">🎁</span><kbd>Q</kbd>
+      </button>
+      <button id="playBtn" class="round play" title="Start wave / pause (Space)">
+        <svg viewBox="0 0 24 24" class="ico-play"><path d="M7 4.5v15l13-7.5z"/></svg>
+        <svg viewBox="0 0 24 24" class="ico-pause"><path d="M6 4.5h4.5v15H6zM13.5 4.5H18v15h-4.5z"/></svg>
+      </button>
     </div>
+
+    <aside id="panel" class="hidden"></aside>
   </div>
 
+  <div id="paused" class="hidden">PAUSED</div>
   <div id="flash"></div>
   <div id="floats"></div>
 
@@ -61,20 +62,21 @@
       </div>
       <div class="drow">
         <button id="retryBtn" class="btn big">Try again <kbd>R</kbd></button>
-        <button id="deathMenuBtn" class="btn">Levels</button>
       </div>
     </div>
   </div>
 
-  <div id="overlay">
+  <div id="cine" class="hidden">
+    <div class="bar top"></div>
+    <div class="bar bottom"><p id="caption"></p></div>
+    <button id="skipBtn" class="btn">Skip <kbd>Esc</kbd></button>
+  </div>
+
+  <div id="overlay" class="hidden">
     <div class="card">
-      <img id="portrait" alt="" />
-      <h1 id="ovTitle">Coal for Christmas</h1>
+      <h1 id="ovTitle"></h1>
       <p id="ovText"></p>
-      <div id="levelBtns"></div>
-      <p class="how">Pick a gadget, click a tile to place it. Traps go <b>on</b> the path, everything else <b>beside</b> it.
-        Click any gadget (or the Grump) to upgrade it. The Grump throws snowballs on his own.
-        Keys: <b>1–5</b> pick, <b>U</b> upgrade, <b>X</b> sell, <b>Q</b> heist, <b>Space</b> next wave, <b>Esc</b> cancel.</p>
+      <div id="ovBtns"></div>
     </div>
   </div>
 

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { wonkyBox, part, cone, cyl, rock, box, flat, glow } from './kit.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { wonkyBox, part, cone, cyl, rock, box, flat, glow, toon } from './kit.js';
 import { makeGift } from './models.js';
+import { COLS, ROWS, key, distToPaths } from './path.js';
 
-export const COLS = 16;
-export const ROWS = 10;
-export const key = (x, z) => x + ',' + z;
+export { COLS, ROWS, key };
+
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -118,7 +119,7 @@ function warehouse() {
 
 function starGate() {
   const g = new THREE.Group();
-  const gold = new THREE.MeshLambertMaterial({ color: '#FFD23F', emissive: '#F4A300', emissiveIntensity: 0.5, flatShading: true });
+  const gold = toon({ color: '#FFD23F', emissive: '#F4A300', emissiveIntensity: 0.5, flatShading: true });
   const ring = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.16, 5, 10), gold);
   ring.position.y = 1.2; ring.rotation.y = Math.PI / 2;
   g.add(ring);
@@ -148,149 +149,270 @@ function bigTree() {
   return g;
 }
 
+// ---------------------------------------------------------------- instanced forest + mountains
+function colored(geo, hex) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  const c = new THREE.Color(hex), n = g.attributes.position.count, arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+const at = (geo, x, y, z, ry = 0) => geo.rotateY(ry).translate(x, y, z);
+let treeGeo;
+function getTreeGeo() {
+  if (treeGeo) return treeGeo;
+  const parts = [colored(at(cyl(0.07, 0.09, 0.3, 5), 0, 0.15, 0), '#6B4226')];
+  const greens = ['#2F7D4F', '#2A6E46', '#3B8C5A'];
+  for (let i = 0; i < 3; i++) {
+    parts.push(colored(at(cone(0.42 - i * 0.1, 0.5, 6), 0, 0.5 + i * 0.3, 0, i * 0.5), greens[i]));
+    parts.push(colored(at(cone(0.3 - i * 0.08, 0.2, 6), 0, 0.72 + i * 0.3, 0, i * 0.5 + 0.3), '#FFFFFF'));
+  }
+  treeGeo = mergeGeometries(parts);
+  return treeGeo;
+}
+const vcMat = toon({ vertexColors: true, flatShading: true });
+/** One draw call for every pine: list of [x, z, scale, rotY]. */
+function forest(list) {
+  const m = new THREE.InstancedMesh(getTreeGeo(), vcMat, list.length);
+  const o = new THREE.Object3D();
+  list.forEach(([x, z, sc, ry], i) => { o.position.set(x, 0, z); o.scale.setScalar(sc); o.rotation.y = ry; o.updateMatrix(); m.setMatrixAt(i, o.matrix); });
+  m.castShadow = true;
+  m.frustumCulled = false;
+  return m;
+}
+/** Low-poly snow-capped peaks merged into one mesh: list of [x, z, radius, height]. */
+function mountains(list, r) {
+  const parts = [];
+  for (const [x, z, rad, h] of list) {
+    const g = new THREE.ConeGeometry(rad, h, 7, 3).toNonIndexed();
+    const pos = g.attributes.position;
+    const seen = new Map();
+    for (let i = 0; i < pos.count; i++) { // jitter shared vertices identically so faces stay joined
+      const k = pos.getX(i).toFixed(2) + ',' + pos.getY(i).toFixed(2) + ',' + pos.getZ(i).toFixed(2);
+      if (!seen.has(k)) seen.set(k, [(r() - 0.5) * rad * 0.28, (r() - 0.5) * h * 0.08, (r() - 0.5) * rad * 0.28]);
+      const [dx, dy, dz] = seen.get(k);
+      const tip = pos.getY(i) > h * 0.49 ? 0.3 : 1;
+      pos.setXYZ(i, pos.getX(i) + dx * tip, pos.getY(i) + dy * tip, pos.getZ(i) + dz * tip);
+    }
+    const col = new Float32Array(pos.count * 3);
+    const rockA = new THREE.Color('#8E9AAF'), rockB = new THREE.Color('#77839A'), snow = new THREE.Color('#FFFFFF');
+    for (let f = 0; f < pos.count; f += 3) {
+      const cy = (pos.getY(f) + pos.getY(f + 1) + pos.getY(f + 2)) / 3 / h + 0.5; // 0 base .. 1 tip
+      const c = cy > 0.52 + (r() - 0.5) * 0.12 ? snow : r() < 0.5 ? rockA : rockB;
+      for (let v = 0; v < 3; v++) { col[(f + v) * 3] = c.r; col[(f + v) * 3 + 1] = c.g; col[(f + v) * 3 + 2] = c.b; }
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    g.rotateY(r() * 6).translate(x, h / 2 - 0.2, z);
+    parts.push(g);
+  }
+  const m = new THREE.Mesh(mergeGeometries(parts), vcMat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function rockOutcrop(r) {
+  const g = new THREE.Group();
+  g.add(part(rock(0.36, 0), '#8E9AAF', 0, 0.2, 0, [r() * 3, r() * 3, 0], [1.1, 1.3, 1]));
+  g.add(part(rock(0.24, 0), '#77839A', 0.24, 0.12, 0.14, [r() * 3, r() * 3, 0]));
+  g.add(part(rock(0.2, 0), '#FFFFFF', -0.04, 0.5, 0, [r() * 3, r() * 3, 0], [1.2, 0.5, 1.1]));
+  g.rotation.y = r() * 6;
+  return g;
+}
+function stormCloud(r) {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) { const c = cloudPuff(r, 1.05 - i * 0.18, i === 0 ? '#8FA3BF' : '#A9B9CF'); c.position.y = 0.1 + i * 0.5; g.add(c); }
+  return g;
+}
+
 // ---------------------------------------------------------------- theme
+// The painted ground covers far more than the playfield so paths can run off-screen.
+const EX0 = -14, EX1 = 30, EZ0 = -10, EZ1 = 18;
 /**
- * Builds the scenery for a level. Returns { group, blocked:Set, buildable(x,z), grumpY, lights, bg, flying }
+ * Builds the scenery for a level around its winding paths.
+ * Returns { group, blocked, opaque (tiles that block line of sight), lake (ice-only tiles),
+ *           buildable(x, z, ice), theme, goal, santaSpot, flying, tick }
  */
-export function buildTheme(level, path) {
+export function buildTheme(level, paths) {
   const T = THEMES[level.theme];
   const r = rng(level.seed);
   const group = new THREE.Group();
-  const blocked = new Set();
-  const [gx, gz] = level.grump;
-  blocked.add(key(gx, gz));
-  const isPath = (x, z) => path.cells.has(key(x, z));
-  const nearPath = (x, z) => {
-    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (isPath(x + dx, z + dz)) return true;
-    return false;
-  };
+  const blocked = new Set(), opaque = new Set(), lake = new Set();
+  const sky = level.theme === 'sky';
+  const dist = (x, z) => distToPaths(paths, x, z);
+  const onPath = (x, z) => dist(x + 0.5, z + 0.5) < 0.82; // tile is too close to the road to build on
+  const inBoard = (x, z) => x >= 0 && x < COLS && z >= 0 && z < ROWS;
+  const main = paths[0];
+  const end = main.pointAt(main.total, new THREE.Vector3());
 
-  let skyCells = null;
-  if (level.theme === 'sky') {
-    skyCells = new Set();
-    for (let x = 0; x < COLS; x++) for (let z = 0; z < ROWS; z++) {
-      if (!isPath(x, z) && nearPath(x, z) && r() < 0.72) skyCells.add(key(x, z));
-    }
-    skyCells.add(key(gx, gz));
+  // goal + the spot beside it where Santa frets between waves
+  let goal;
+  if (level.theme === 'snow') { goal = warehouse(); goal.position.set(end.x + 1.5, 0, end.z); }
+  else if (sky) { goal = starGate(); goal.position.set(end.x + 0.6, 0, end.z); }
+  else { goal = bigTree(); goal.position.set(end.x + 1.3, 0, end.z); }
+  group.add(goal);
+  const santaSpot = new THREE.Vector3(end.x - 1.1, 0, end.z + 1.9);
+  const sk = key(Math.floor(santaSpot.x), Math.floor(santaSpot.z));
+  blocked.add(sk);
+  if (sky) { const c = cloudPuff(r, 1.7); c.position.copy(santaSpot).setY(-0.36); group.add(c); }
+
+  // frozen lake: only frost folk can stand on it
+  const L = level.lake;
+  if (L) for (let x = 0; x < COLS; x++) for (let z = 0; z < ROWS; z++) {
+    if (!onPath(x, z) && ((x + 0.5 - L.x) / L.rx) ** 2 + ((z + 0.5 - L.z) / L.rz) ** 2 < 0.92) lake.add(key(x, z));
   }
 
-  // decorations that occupy cells
+  // rocky peaks standing on the board: they take up tiles and block line of sight
+  const peaks = [];
+  for (const [px, pz, rad, h] of level.peaks || []) {
+    peaks.push([px, pz, rad, h]);
+    for (let x = 0; x < COLS; x++) for (let z = 0; z < ROWS; z++) {
+      if (!onPath(x, z) && Math.hypot(x + 0.5 - px, z + 0.5 - pz) < rad * 0.8) { blocked.add(key(x, z)); opaque.add(key(x, z)); }
+    }
+  }
+
+  let skyCells = null;
+  if (sky) {
+    skyCells = new Set();
+    for (let x = 0; x < COLS; x++) for (let z = 0; z < ROWS; z++) {
+      const d = dist(x + 0.5, z + 0.5);
+      if (d >= 0.82 && d < 2.3 && r() < 0.78) skyCells.add(key(x, z));
+    }
+  }
+
+  // decorations that occupy tiles
+  const trees = [];
   for (let x = 0; x < COLS; x++) for (let z = 0; z < ROWS; z++) {
-    if (isPath(x, z) || blocked.has(key(x, z))) continue;
+    const k = key(x, z);
+    if (onPath(x, z) || blocked.has(k) || lake.has(k)) continue;
     const roll = r();
-    if (level.theme === 'snow' && roll < 0.13) {
-      const t = roll < 0.1 ? pineTree(r) : part(rock(0.3, 1), '#FFFFFF', 0, 0.08, 0, null, [1.2, 0.6, 1.1]);
-      t.position.x += x + 0.5; t.position.z += z + 0.5;
-      group.add(t); blocked.add(key(x, z));
+    if (level.theme === 'snow' && roll < 0.12) {
+      if (roll < 0.08) trees.push([x + 0.5, z + 0.5, 0.85 + r() * 0.45, r() * 6]);
+      else { const o = rockOutcrop(r); o.position.set(x + 0.5, 0, z + 0.5); group.add(o); }
+      blocked.add(k); opaque.add(k);
     } else if (level.theme === 'street' && roll < 0.3) {
       const h = house(r);
       h.position.set(x + 0.5, 0, z + 0.5);
-      group.add(h); blocked.add(key(x, z));
+      group.add(h); blocked.add(k); opaque.add(k);
     } else if (level.theme === 'street' && roll < 0.36) {
       const l = lampPost();
       l.position.set(x + 0.15, 0, z + 0.15);
       group.add(l);
+    } else if (sky && ((roll < 0.06 && dist(x + 0.5, z + 0.5) > 2.3) || (roll < 0.13 && skyCells.has(k)))) {
+      const c = stormCloud(r); // thunderheads block the view
+      c.position.set(x + 0.5, 0, z + 0.5);
+      group.add(c); blocked.add(k); opaque.add(k);
     }
   }
 
-  // board texture (path + tiles painted in one canvas)
-  const PX = 64;
-  const cv = document.createElement('canvas'); cv.width = COLS * PX; cv.height = ROWS * PX;
+  // ground texture: no grid, just terrain with the roads winding across it
+  const PX = 40, W = EX1 - EX0, H = EZ1 - EZ0;
+  const cv = document.createElement('canvas'); cv.width = W * PX; cv.height = H * PX;
   const ctx = cv.getContext('2d');
-  for (let x = 0; x < COLS; x++) for (let z = 0; z < ROWS; z++) {
-    const px = x * PX, pz = z * PX;
-    if (isPath(x, z)) {
-      ctx.fillStyle = T.path; ctx.fillRect(px, pz, PX, PX);
-    } else if (level.theme === 'sky') {
-      if (skyCells.has(key(x, z))) {
-        ctx.fillStyle = (x + z) % 2 ? T.tileA : T.tileB;
-        ctx.beginPath(); ctx.roundRect(px + 3, pz + 3, PX - 6, PX - 6, 16); ctx.fill();
-      }
-    } else {
-      ctx.fillStyle = (x + z) % 2 ? T.tileA : T.tileB; ctx.fillRect(px, pz, PX, PX);
+  const cx = (x) => (x - EX0) * PX, cz = (z) => (z - EZ0) * PX;
+  if (!sky) {
+    ctx.fillStyle = T.ground; ctx.fillRect(0, 0, cv.width, cv.height);
+    for (let i = 0; i < 260; i++) { // soft drifts so the ground is not one flat colour
+      ctx.fillStyle = i % 2 ? T.tileA : T.tileB;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.ellipse(r() * cv.width, r() * cv.height, 30 + r() * 90, 14 + r() * 40, r() * 3, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (L) {
+    ctx.fillStyle = '#DCEFFA'; ctx.beginPath(); ctx.ellipse(cx(L.x), cz(L.z), (L.rx + 0.22) * PX, (L.rz + 0.22) * PX, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#8FD0EE'; ctx.beginPath(); ctx.ellipse(cx(L.x), cz(L.z), L.rx * PX, L.rz * PX, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#A9DDF5'; ctx.beginPath(); ctx.ellipse(cx(L.x - L.rx * 0.2), cz(L.z - L.rz * 0.15), L.rx * 0.62 * PX, L.rz * 0.6 * PX, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (let i = 0; i < 9; i++) { // skate marks and cracks
+      const a = r() * 6, rr = 0.2 + r() * 0.6, len = 0.25 + r() * 0.3;
+      const x0 = L.x + Math.cos(a) * L.rx * rr, z0 = L.z + Math.sin(a) * L.rz * rr;
+      ctx.beginPath(); ctx.moveTo(cx(x0), cz(z0)); ctx.lineTo(cx(x0 + len), cz(z0 - len * 0.5)); ctx.stroke();
     }
   }
-  // path edges + centre markings
-  ctx.strokeStyle = T.pathEdge; ctx.lineWidth = 5;
-  for (const c of path.cells.values()) {
-    const px = c.x * PX, pz = c.z * PX;
-    const edges = [[0, -1, px, pz, px + PX, pz], [0, 1, px, pz + PX, px + PX, pz + PX], [-1, 0, px, pz, px, pz + PX], [1, 0, px + PX, pz, px + PX, pz + PX]];
-    for (const [dx, dz, x0, y0, x1, y1] of edges) {
-      const nx = c.x + dx, nz = c.z + dz;
-      const outside = nx < 0 || nx >= COLS; // path continues off-board at the ends
-      if (!isPath(nx, nz) && !outside) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
-    }
-    if (level.theme === 'street') {
-      ctx.fillStyle = '#F4D35E';
-      if (c.dir.x !== 0) ctx.fillRect(px + PX * 0.3, pz + PX * 0.47, PX * 0.4, PX * 0.06);
-      else ctx.fillRect(px + PX * 0.47, pz + PX * 0.3, PX * 0.06, PX * 0.4);
-    } else if (level.theme === 'snow') {
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.beginPath(); ctx.ellipse(px + PX * (0.3 + ((c.x * 7 + c.z * 3) % 5) * 0.1), pz + PX * 0.5, 7, 4, 0.5, 0, 7); ctx.fill();
+  const trace = (p) => { ctx.beginPath(); p.samples.forEach((s, i) => (i ? ctx.lineTo(cx(s.x), cz(s.z)) : ctx.moveTo(cx(s.x), cz(s.z)))); };
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const p of paths) { trace(p); ctx.strokeStyle = T.pathEdge; ctx.lineWidth = PX * 1.02; ctx.stroke(); }
+  for (const p of paths) { trace(p); ctx.strokeStyle = T.path; ctx.lineWidth = PX * 0.86; ctx.stroke(); }
+  for (const p of paths) {
+    if (level.theme === 'street') { trace(p); ctx.strokeStyle = '#F4D35E'; ctx.lineWidth = 3; ctx.setLineDash([14, 16]); ctx.stroke(); ctx.setLineDash([]); }
+    else if (level.theme === 'snow') { // footprints
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      for (let i = 4; i < p.samples.length; i += 9) { const s = p.samples[i]; ctx.beginPath(); ctx.ellipse(cx(s.x) + ((i % 2) * 10 - 5), cz(s.z) + ((i % 3) * 5 - 5), 5, 3, 0.5, 0, 7); ctx.fill(); }
     }
   }
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(COLS, ROWS), new THREE.MeshLambertMaterial({ map: tex, transparent: level.theme === 'sky' }));
-  board.rotation.x = -Math.PI / 2; board.position.set(COLS / 2, 0.01, ROWS / 2); board.receiveShadow = true;
+  const noOutline = { outlineParameters: { visible: false } };
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(W, H), toon({ map: tex, transparent: sky }));
+  board.material.userData = noOutline;
+  board.rotation.x = -Math.PI / 2; board.position.set((EX0 + EX1) / 2, 0.01, (EZ0 + EZ1) / 2); board.receiveShadow = true;
   group.add(board);
-
   if (T.ground) {
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 70), new THREE.MeshLambertMaterial({ color: T.ground }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 110), toon({ color: T.ground }));
+    ground.material.userData = noOutline;
     ground.rotation.x = -Math.PI / 2; ground.position.set(COLS / 2, 0, ROWS / 2); ground.receiveShadow = true;
     group.add(ground);
   }
 
-  // framing outside the board + goal
-  const end = path.pointAt(path.total, new THREE.Vector3());
-  let goal;
+  // framing outside the playfield
+  const clear = (x, z, pad) => dist(x, z) > pad && Math.hypot(x - goal.position.x, z - goal.position.z) > pad + 2.6 && Math.hypot(x - santaSpot.x, z - santaSpot.z) > 1.3;
   if (level.theme === 'snow') {
-    for (let i = 0; i < 46; i++) {
-      const x = -5 + r() * 27, z = r() < 0.6 ? -4.5 + r() * 3.6 : 10.8 + r() * 4;
-      if (x > 14.5 && z > 2) continue;
-      const t = pineTree(r, 1.5); t.position.set(x, 0, z); group.add(t);
+    // mountain range along the far edge, foothills just behind the board, shoulders at the sides
+    for (let x = EX0 + 1; x < EX1; x += 3.4 + r() * 1.6) peaks.push([x, -6.6 - r() * 2.5, 3.2 + r() * 1.8, 6 + r() * 4.5]);
+    for (let x = EX0 + 3; x < EX1; x += 3 + r() * 1.6) peaks.push([x, -2.9 - r() * 1.1, 1.5 + r() * 0.9, 2.4 + r() * 1.8]);
+    for (const sx of [-1, 1]) for (let z = -1; z < 13; z += 2.6 + r() * 1.6) {
+      const x = sx < 0 ? -3.4 - r() * 3.2 : COLS + 4.6 + r() * 3.2;
+      if (clear(x, z, 2.6)) peaks.push([x, z, 1.5 + r() * 1.1, 2.4 + r() * 2.4]);
     }
-    for (let i = 0; i < 8; i++) { const t = pineTree(r, 1.4); t.position.set(-2.5 - r() * 3, 0, 4 + r() * 6); group.add(t); }
-    goal = warehouse(); goal.position.set(end.x + 2.1, 0, end.z);
-  } else if (level.theme === 'sky') {
+    for (let x = EX0; x < EX1; x += 0.9) for (let z = EZ0 + 1.5; z < EZ1; z += 0.9) {
+      const tx = x + (r() - 0.5) * 0.7, tz = z + (r() - 0.5) * 0.7, roll = r();
+      if (tx > -0.7 && tx < COLS + 0.7 && tz > -0.7 && tz < ROWS + 0.9) continue;
+      if (roll > 0.86 || !clear(tx, tz, 1.15)) continue;
+      if (peaks.some(([mx, mz, rad]) => Math.hypot(tx - mx, tz - mz) < rad * 0.8)) continue;
+      trees.push([tx, tz, (tz > ROWS ? 1.0 : 1.25) + r() * 0.7, r() * 6]);
+    }
+  } else if (sky) {
     for (const k of skyCells) {
       const [x, z] = k.split(',').map(Number);
-      const c = cloudPuff(r, 1.25); c.position.set(x + 0.5, -0.32, z + 0.5); group.add(c);
+      const c = cloudPuff(r, 1.25); c.position.set(x + 0.5, -0.4, z + 0.5); group.add(c);
     }
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 46; i++) {
       const c = cloudPuff(r, 2 + r() * 3, r() < 0.5 ? '#FFFFFF' : '#E4F3FF');
-      c.position.set(-12 + r() * 40, -3 - r() * 7, -10 + r() * 30); group.add(c);
+      c.position.set(-14 + r() * 44, -3 - r() * 7, -10 + r() * 30); group.add(c);
     }
-    goal = starGate(); goal.position.set(end.x + 1.1, 0, end.z);
   } else {
-    for (let i = 0; i < 60; i++) {
-      const x = -6 + r() * 28, z = r() < 0.6 ? -5 + r() * 4.3 : 10.6 + r() * 4.5;
+    for (let i = 0; i < 90; i++) {
+      const x = -10 + r() * 36, z = r() < 0.55 ? -6 + r() * 5.2 : 10.7 + r() * 5;
+      if (!clear(x, z, 1.3)) continue;
       const h = house(r, 1.3 + r() * 0.5); h.position.set(x, 0, z); group.add(h);
     }
-    for (let i = 0; i < 10; i++) { const h = house(r, 1.3); h.position.set(-1.5 - r() * 4, 0, 3 + r() * 7); group.add(h); }
-    goal = bigTree(); goal.position.set(end.x + 1.8, 0, end.z);
+    for (let i = 0; i < 26; i++) {
+      const x = i % 2 === 0 ? -1.6 - r() * 8 : COLS + 3.5 + r() * 6, z = -1 + r() * 11;
+      if (!clear(x, z, 1.3)) continue;
+      const h = house(r, 1.3); h.position.set(x, 0, z); group.add(h);
+    }
   }
-  group.add(goal);
-
-  // grump's perch
-  const perch = level.theme === 'sky' ? cloudPuff(r, 1.5) : part(cyl(0.42, 0.48, 0.22, 7), level.theme === 'snow' ? '#DCEAF5' : '#8D93B8', 0, 0.11, 0);
-  perch.position.x += gx + 0.5; perch.position.z += gz + 0.5;
-  if (level.theme === 'sky') perch.position.y = -0.1;
-  group.add(perch);
+  if (peaks.length) group.add(mountains(peaks, r));
+  if (trees.length) group.add(forest(trees));
 
   // falling snow
-  const N = 420;
+  const N = 520;
   const pos = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) { pos[i * 3] = -4 + r() * 24; pos[i * 3 + 1] = r() * 10; pos[i * 3 + 2] = -3 + r() * 16; }
+  for (let i = 0; i < N; i++) { pos[i * 3] = -8 + r() * 32; pos[i * 3 + 1] = r() * 10; pos[i * 3 + 2] = -4 + r() * 18; }
   const snowGeo = new THREE.BufferGeometry(); snowGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.09, transparent: true, opacity: 0.9 }));
   group.add(snow);
 
-  const buildable = (x, z) => x >= 0 && x < COLS && z >= 0 && z < ROWS && !isPath(x, z) && !blocked.has(key(x, z)) && (!skyCells || skyCells.has(key(x, z)));
+  /** Can something stand on this tile? Frozen-lake tiles only take ice units. */
+  const buildable = (x, z, ice) => {
+    const k = key(x, z);
+    if (!inBoard(x, z) || onPath(x, z) || blocked.has(k)) return false;
+    if (lake.has(k)) return !!ice;
+    return !skyCells || skyCells.has(k);
+  };
 
   return {
-    group, blocked, buildable, theme: T, goal,
-    grumpY: level.theme === 'sky' ? 0.1 : 0.22,
-    flying: level.theme === 'sky',
+    group, blocked, opaque, lake, buildable, theme: T, goal, santaSpot,
+    flying: sky,
     tick(dt, t) {
       const p = snowGeo.attributes.position;
       for (let i = 0; i < N; i++) {
@@ -301,7 +423,7 @@ export function buildTheme(level, path) {
       }
       p.needsUpdate = true;
       const spin = goal.getObjectByName('spin'); if (spin) spin.rotation.y = t * 2;
-      if (level.theme === 'sky') goal.children[0].rotation.z = t * 0.6;
+      if (sky) goal.children[0].rotation.z = t * 0.6;
     },
   };
 }
@@ -318,7 +440,7 @@ export const beltTexs = BELT_COLORS.map((col) => {
   t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 });
-const beltMats = beltTexs.map((t) => new THREE.MeshLambertMaterial({ map: t }));
+const beltMats = beltTexs.map((t) => toon({ map: t }));
 
 /** Conveyor: chevrons point along local +z; rotate so +z is the push direction. */
 export function makeConveyor(level = 1) {

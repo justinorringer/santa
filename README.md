@@ -9,31 +9,41 @@ npm run dev
 ```
 
 ## How it plays
-- Pick a gadget (click a card or press 1–5) and click a tile to place it.
-- Click any placed gadget, or the Grump himself, to open its panel: **U** upgrades, **X** sells (60% back).
-- The Grump throws snowballs on his own. His ult, **Present Heist (Q)**, charges as you smash gifts: it steals
-  every present on the board, raids Santa's sack for 35% of its health, and takes 5 presents back from the delivered pile.
-- Break a gift and its carrier runs off; break it with coal and they run off covered in soot.
-- Lose when 100 presents are delivered (death screen, **R** to retry). Clear every wave to win the level.
+- No menu: an animated intro shows Santa stocking his warehouse and the Grump deciding to leave him short, then the game starts.
+  Levels run in order (The Warehouse, Sleigh Lanes, Tinsel Street) and progress is remembered.
+- Pick a **hero** and place them: the Grump (**G**, auto snowballs, ult: Present Heist) or Jack Frost (**J**, icy gusts that blow carriers back, ult: Deep Freeze).
+  Only one hero can be out at a time; send one home from their panel to bring out the other. The ult is the round icon in the corner (**Q**).
+- Pick a gadget (card or **1–6**) and click. There is no visible grid, but everything snaps: gadgets to tiles, traps to spots along the winding path.
+- The frozen lake on level 1 only holds ice folk: Jack Frost and the Snowman.
+- Click any gadget to open its panel: current stats and every improvement, expandable. **U** upgrades, **X** sells (60% back).
+- The round button (or **Space**) starts the next wave and pauses/resumes it.
+- Health is counted in hits: reindeer 2, elves 3, Mrs. Claus 8, Santa 60–100. Reindeer are the fastest.
+- Level 2 is in the air: the crew flies planes and a flying boat, your gadgets ride balloon gondolas, and Santa comes down his own sled lane.
+- Between waves Santa frets by the goal (running laps or stress-eating cookies), and each level win gets a short scene of the same.
+- Lose when 100 presents are delivered (death screen, **R** to retry).
 
 | Gadget | Goes | Base | Upgrades |
 | --- | --- | --- | --- |
-| Coal Chucker | beside the path | Lobs coal piles onto nearby path tiles; piles hurt whoever walks over them | Hot Coals (burn) → Coal Cart (faster, bigger) → Meltdown (spent piles explode) |
+| Coal Chucker | beside the path | Lobs coal piles onto nearby path spots | Hot Coals (burn) → Coal Cart (faster, bigger) → Meltdown (spent piles explode) |
 | Conveyor | on the path | Drags carriers the wrong way | Greased Rollers → Reverse Gear (flings them back) → Gift Shredder (grinds gifts) |
-| Spikes | on the path | Fast stabs at anything on the tile | Sharpened → Icicles (freeze) → Gift Grinder (wider, +30% damage taken) |
-| Evil Reindeer | beside the path | Rapid spit that slows | Sticky Spit → Triple Spit → Acid Rain (splash + corrosion) |
-| Evil Toy Soldier | beside the path | Long-range popgun | Bayonet Drill → Double Barrel → Cannon Captain (explosive) |
-| The Grump | fixed perch | Auto snowballs | Ice Balls (chill) → Double Throw → Avalanche (giant, faster heist) |
+| Spikes | on the path | Stabs anything on the spot | Sharpened → Icicles (freeze) → Gift Grinder (double hits, wider, torn wrapping) |
+| Evil Reindeer | beside the path | Sticky spit that slows | Sticky Spit → Triple Spit → Acid Rain (splash + corrosion) |
+| Evil Toy Soldier | anywhere buildable | Sniper: unlimited range, but only what it can see | Piercing Shots → Double Barrel → Cannon Captain (explosive) |
+| Snowman | beside the path or on the lake | Bowls a giant snowball down a straight lane; it shrinks and hits softer the further it rolls | Packed Snow → Ice Core (stun) → Avalanche (bursts at the end) |
 
-Every upgrade changes how the gadget looks.
+Every upgrade changes how the gadget looks. Heroes have three upgrades too.
 
-Levels: The Warehouse (snow), Sleigh Lanes (clouds, build only on cloud tops), Tinsel Street (houses).
+## Look
+Cel shaded: every lit material is a banded toon material (`toon()` in `src/kit.js`) and the scene is drawn with ink outlines (`OutlineEffect`).
 
 ## Code
-- `src/kit.js` – shared model helpers (painted blocks, legs, faces)
+- `src/kit.js` – shared model helpers (toon materials, painted blocks, figures, faces)
 - `src/models.js` – characters, gifts, per-level upgrade parts
-- `src/scenery.js` – level themes, props, conveyor/spikes/coal piles
-- `src/main.js` – game loop, waves, gadgets, upgrades, UI. All numbers are the tables at the top.
-- `models.html` – model viewer (`?set=base|side|back|upgrades|hero`)
+- `src/path.js` – winding paths (smooth curves, distance lookups, snap spots)
+- `src/scenery.js` – level themes: ground and path texture, frozen lake, instanced forest, mountains, houses, clouds, conveyor/spikes/coal piles
+- `src/props.js` – sky aircraft, balloon gondola, cookie plate
+- `src/main.js` – game loop, waves, gadgets, heroes, cutscenes, UI. All numbers are the tables at the top.
+- `dev/bot.js` – balance bot: `const { suite } = await import('/dev/bot.js'); suite()` in the browser console
+- `models.html` – model viewer (`?set=base|side|back|upgrades|hero|frost|snowman|props`)
 
-Dev console: `__dbg.load(n)` jumps to a level; `__game` is the live state.
+Dev console: `__dbg.load(n)` jumps to a level, `__dbg.intro()` replays the intro; `__game` is the live state.

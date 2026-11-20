@@ -3,6 +3,19 @@ import * as THREE from 'three';
 
 const TEX = 128;
 
+// ---------- cel shading ----------
+// Every lit material goes through toon(): lighting snaps to a few flat bands.
+const BANDS = new Uint8Array([120, 120, 190, 190, 255, 255]);
+const gradientMap = new THREE.DataTexture(BANDS, BANDS.length, 1, THREE.RedFormat);
+gradientMap.minFilter = gradientMap.magFilter = THREE.NearestFilter;
+gradientMap.needsUpdate = true;
+export function toon({ flatShading, ...params } = {}) {
+  const m = new THREE.MeshToonMaterial({ gradientMap, ...params });
+  // Not a declared MeshToonMaterial option, but the shader honours it: gives the faceted low-poly look.
+  if (flatShading) m.flatShading = true;
+  return m;
+}
+
 export function shade(hex, amt) {
   // amt > 0 lightens, amt < 0 darkens (and saturates slightly, never grey)
   const c = new THREE.Color(hex);
@@ -90,7 +103,7 @@ export function wonkyBox(W, H, D, { taper = 0.92, seed = 1, wonk = 0.025, bulge 
 const FACES = ['right', 'left', 'top', 'bottom', 'front', 'back']; // BoxGeometry group order
 
 export function flat(color, opts = {}) {
-  return new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts });
+  return toon({ color, flatShading: true, ...opts });
 }
 
 /**
@@ -116,7 +129,7 @@ export function paintedBox(size, color, paint = {}, { taper = 0.92, seed = 1, co
     paint[face]?.(ctx, face);
     ctx.restore();
     paintRim(ctx);
-    return new THREE.MeshLambertMaterial({ map: texFrom(cv), flatShading: true });
+    return toon({ map: texFrom(cv), flatShading: true });
   });
   const m = new THREE.Mesh(wonkyBox(W, H, D, { taper, seed }), mats);
   m.castShadow = true;
@@ -254,10 +267,33 @@ export const cyl = (rt, rb, h, sides = 6) => new THREE.CylinderGeometry(rt, rb, 
 export const rock = (r, detail = 0) => new THREE.IcosahedronGeometry(r, detail);
 export const lump = (r) => new THREE.DodecahedronGeometry(r, 0);
 export const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+/** Cylinder mesh running from point a to point b, both [x, y, z] (twigs, struts, masts, ropes). r2 = radius at b. */
+export function stick(a, b, r, color, sides = 5, r2 = r) {
+  const A = new THREE.Vector3(a[0], a[1], a[2]), B = new THREE.Vector3(b[0], b[1], b[2]);
+  const m = part(cyl(r2, r, A.distanceTo(B), sides), color, 0, 0, 0);
+  m.position.copy(A).add(B).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.sub(A).normalize());
+  return m;
+}
+/** Bakes several parts (meshes with their own position/rotation/scale) into ONE mesh: one draw call. */
+export function fuse(parts, material) {
+  const pos = [];
+  for (const m of parts) {
+    m.updateMatrix();
+    const geo = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+    for (const v of geo.attributes.position.array) pos.push(v);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
+  return mesh;
+}
 const glowCache = {};
 /** Self-lit flat material (embers, eyes, crystals). */
 export function glow(color, intensity = 0.9) {
-  return (glowCache[color + intensity] ||= new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: intensity, flatShading: true }));
+  return (glowCache[color + intensity] ||= toon({ color, emissive: color, emissiveIntensity: intensity, flatShading: true }));
 }
 
 // ---------- flat cartoon face helpers (canvas ctx scaled to 0..1) ----------

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildFigure, paintedBox, part, cone, cyl, rock, lump, box, chunk, tone, flat, glow, shade, circle, band, sawtooth, eyes, dotEyes, cheeks, smile, squareFace } from './kit.js';
+import { buildFigure, paintedBox, part, cone, cyl, rock, lump, box, chunk, tone, flat, glow, shade, circle, band, sawtooth, eyes, dotEyes, cheeks, smile, squareFace, toon, stick, fuse } from './kit.js';
 
 const SKIN = '#F2C6A0';
 
@@ -19,6 +19,12 @@ function limb({ w = 0.2, d = 0.24, len = 0.36, color, cuff, hand, handLen = 0.16
   return g;
 }
 const place = (o, x, y, z, rx = 0, rz = 0) => { o.position.set(x, y, z); o.rotation.set(rx, 0, rz); return o; };
+/** Four-sided crystal spike whose BASE centre sits at (x, y, z); rx / rz tilt it away from straight up. */
+function shard(r, len, color, x, y, z, rx = 0, rz = 0, flatZ = 1) {
+  const m = P(cone(r, len, 4), color, 0, 0, 0, [rx, 0, rz], [1, 1, flatZ]);
+  m.position.set(x, y, z).add(new THREE.Vector3(0, len / 2, 0).applyEuler(m.rotation));
+  return m;
+}
 
 // ------------------------------------------------------------------ Santa
 function santa() {
@@ -410,6 +416,131 @@ function grump() {
   });
 }
 
+// ------------------------------------------------------------------ Jack Frost (tower)
+const FROST = { skin: '#9FD8F5', tunic: '#3A6EA5', fur: '#F4FAFF', hair: '#E9F6FD', ice: '#A8E4F7', glow: '#8FDCFF', scarf: '#7A5CE0' };
+function jackFrost() {
+  const F = FROST, GLOW = glow(F.glow, 0.5);
+  const hs = [0.8, 0.58, 0.7];
+  return buildFigure({
+    torso: {
+      size: [0.6, 0.5, 0.52], color: F.tunic, seed: 91,
+      paint: { sides(ctx) { sawtooth(ctx, 0.84, 0.1, 5, F.fur, false); } }, // frosted hem
+    },
+    head: {
+      size: hs, color: F.skin, seed: 92, z: 0.02, colors: { top: F.hair, back: F.hair },
+      paint: {
+        right(ctx) { ctx.fillStyle = F.hair; ctx.fillRect(0.55, 0, 0.45, 1); }, // hair round the back
+        left(ctx) { ctx.fillStyle = F.hair; ctx.fillRect(0, 0, 0.45, 1); },
+        front(ctx) {
+          squareFace(ctx, hs[0], hs[1], () => eyes(ctx, { y: 0.38, dx: 0.33, r: 0.125, iris: '#1C9BD0', lid: 0.32, lidColor: shade(F.skin, -0.12) }));
+        },
+      },
+    },
+    feet: { color: '#27467A', size: [0.24, 0.24, 0.28], at: [[-0.16, 0], [0.16, 0]], toe: [0.24, 0.14, 0.16], toeColor: F.fur },
+    build(g, { head: h, hh, hf }) {
+      // frost-fur collar that overhangs the shoulders, scarf wrapped above it with a tail flying out behind
+      g.add(P(chunk(0.9, 0.14, 0.78, 93), F.fur, 0, 0.57, 0.02));
+      g.add(P(chunk(0.84, 0.09, 0.72, 94), F.scarf, 0, 0.655, 0.02));
+      g.add(P(chunk(0.16, 0.08, 0.42, 95), F.scarf, -0.36, 0.69, -0.46, [0.12, 0.75, 0]));
+      g.add(P(chunk(0.14, 0.07, 0.26, 96), shade(F.scarf, 0.08), -0.53, 0.75, -0.62, [0.2, 1.0, 0]));
+      // both arms reach forward and up: hands cupped under the mouth, ready to blow
+      for (const s of [-1, 1]) {
+        const a = new THREE.Group();
+        a.name = s < 0 ? 'armL' : 'armR';
+        a.add(P(chunk(0.17, 0.17, 0.44, 97), F.tunic, 0, 0, 0.2));
+        a.add(P(box(0.22, 0.22, 0.09), F.fur, 0, 0, 0.42));
+        a.add(P(chunk(0.18, 0.13, 0.2, 98), F.skin, 0, 0, 0.55));
+        a.position.set(s * 0.36, 0.5, 0.06);
+        a.rotation.set(-0.2, -s * 0.5, 0);
+        g.add(a);
+      }
+      g.add(P(rock(0.065), glow(F.glow, 0.8), 0, 0.7, 0.6)); // frost puff in his palms
+      // face: cocked brow ridge, sharp nose, puffed cheeks and an "O" mouth mid-blow, pointy ears
+      h.add(P(chunk(0.28, 0.08, 0.1, 99), '#3F78B8', -0.19, 0.49, hf + 0.01, [0, 0, -0.1]));
+      h.add(P(chunk(0.28, 0.08, 0.1, 100), '#3F78B8', 0.19, 0.45, hf + 0.01, [0, 0, 0.3]));
+      h.add(P(cone(0.06, 0.2, 4), '#7DB6DC', 0, 0.3, hf + 0.08, [Math.PI / 2, 0, 0]));
+      h.add(P(cyl(0.1, 0.11, 0.08, 6), '#5C8FC2', 0, 0.17, hf + 0.04, [Math.PI / 2, 0, 0]));
+      h.add(P(cyl(0.06, 0.06, 0.02, 6), '#1D3557', 0, 0.17, hf + 0.085, [Math.PI / 2, 0, 0]));
+      for (const s of [-1, 1]) {
+        h.add(P(chunk(0.17, 0.15, 0.12, 101), '#D9AEEA', s * 0.27, 0.19, hf + 0.01));
+        h.add(P(cone(0.13, 0.42, 4), F.skin, s * 0.47, 0.32, 0, [0, 0, -s * 1.05], [1, 1, 0.5]));
+      }
+      // ice-crystal hair swept back: cap + chunky spikes (fused per colour), a few glowing
+      h.add(P(chunk(0.86, 0.16, 0.76, 102), F.hair, 0, hh - 0.02, -0.02));
+      h.add(fuse([shard(0.18, 0.78, GLOW, 0, hh, 0, -0.55, 0), shard(0.13, 0.4, GLOW, 0.17, hh - 0.04, -0.28, -1.15, -0.3), shard(0.12, 0.34, GLOW, -0.2, 0.3, -0.3, -1.75, 0.3)], GLOW));
+      const ICE = tone(F.ice);
+      h.add(fuse([
+        shard(0.15, 0.52, ICE, -0.24, hh, -0.02, -0.6, 0.45), shard(0.15, 0.52, ICE, 0.24, hh, -0.02, -0.6, -0.45),
+        shard(0.13, 0.4, ICE, -0.17, hh - 0.04, -0.28, -1.15, 0.3), shard(0.14, 0.38, ICE, 0, 0.42, -0.3, -1.5, 0), shard(0.12, 0.34, ICE, 0.2, 0.3, -0.3, -1.75, -0.3),
+      ], ICE));
+      const fringe = new THREE.Group();
+      fringe.name = 'fringe';
+      for (const s of [-1, 1]) fringe.add(shard(0.1, 0.3, F.fur, s * 0.16, hh + 0.02, 0.26, 1.0, -s * 0.35));
+      h.add(fringe);
+    },
+  });
+}
+
+// ------------------------------------------------------------------ Snowman (tower)
+const SNOW = { base: '#C6D9EC', chest: '#E2ECF7', head: '#F7FAFF', ball: '#EAF2FA', lump: '#BFD3E8', coal: '#22222A', twig: '#5A3A22', carrot: '#F28C28', scarf: '#B3202A', tin: '#7C8794' };
+function snowman() {
+  const S = SNOW, g = new THREE.Group();
+  const COAL = tone(S.coal), TWIG = tone(S.twig), MITT = tone(S.scarf), LUMP = tone(S.lump);
+  // three stacked wonky snow blocks in slightly different tones: blue-ish base, cool chest, bright head
+  const base = paintedBox([1.0, 0.56, 0.9], S.base, {}, { seed: 121, taper: 0.94 });
+  base.position.y = 0.28;
+  base.name = 'body';
+  const chest = paintedBox([0.76, 0.48, 0.7], S.chest, {}, { seed: 122, taper: 0.94 });
+  chest.position.set(0, 0.74, 0.02);
+  g.add(base, chest);
+  g.add(fuse([part(rock(0.2), LUMP, -0.44, 0.17, 0.26), part(rock(0.17), LUMP, 0.46, 0.14, -0.2), part(rock(0.18), LUMP, -0.2, 0.15, -0.3)], LUMP)); // drift lumps round the base
+  g.add(fuse([[0.05, 0.87, 0.39], [0.05, 0.71, 0.4], [0.05, 0.4, 0.48]].map(([x, y, z]) => part(lump(0.055), COAL, x, y, z, [x * 9, y * 7, 0])), COAL)); // coal buttons
+  // scarf with a hanging tail
+  g.add(P(chunk(0.86, 0.13, 0.78, 124), S.scarf, 0, 0.97, 0.04));
+  g.add(P(chunk(0.17, 0.36, 0.09, 125), S.scarf, -0.25, 0.79, 0.42, [0.06, 0, 0.1]));
+  g.add(P(box(0.18, 0.06, 0.1), '#F1EDE4', -0.26, 0.69, 0.425, [0.06, 0, 0.1]));
+  // twig arms reaching forward and down onto the ball, mittens on the ends
+  g.add(fuse([-1, 1].flatMap((s) => [
+    stick([s * 0.36, 0.86, 0.02], [s * 0.5, 0.84, 0.22], 0.055, TWIG, 5, 0.05),
+    stick([s * 0.5, 0.84, 0.22], [s * 0.28, 0.74, 0.5], 0.05, TWIG, 5, 0.036),
+    stick([s * 0.47, 0.83, 0.28], [s * 0.6, 0.98, 0.4], 0.03, TWIG, 4, 0.018),
+  ]), TWIG));
+  g.add(fuse([-1, 1].map((s) => part(chunk(0.18, 0.18, 0.2, 126), MITT, s * 0.27, 0.72, 0.52, [0.5, -s * 0.3, 0])), MITT));
+  // the snowball he is about to bowl: the game hides / shows this by name
+  const ball = P(rock(0.4, 1), S.ball, 0, 0.4, 0.75, [0.3, 0.5, 0]);
+  ball.name = 'ball';
+  g.add(ball);
+
+  const hh = 0.56, hf = 0.33;
+  const h = new THREE.Group();
+  h.name = 'head';
+  h.position.set(0, 0.94, 0.05);
+  const skull = paintedBox([0.72, hh, 0.66], S.head, {}, { seed: 123, taper: 0.94 });
+  skull.position.y = hh / 2;
+  skull.name = 'skull';
+  h.add(skull);
+  h.add(P(cone(0.085, 0.42, 5), S.carrot, 0, 0.27, hf + 0.19, [Math.PI / 2, 0, 0])); // carrot nose, well out
+  h.add(fuse([ // coal eyes + a coal frown
+    ...[-1, 1].map((s) => part(lump(0.07), COAL, s * 0.17, 0.39, hf + 0.02, [s, 0.4, 0])),
+    ...[-2, -1, 0, 1, 2].map((i) => part(lump(0.042), COAL, i * 0.085, 0.135 - i * i * 0.014, hf + 0.015, [i, 0.3, 0])),
+  ], COAL));
+  const brows = new THREE.Group(); // heavy angry twig brows (swapped for icicles at level 3)
+  brows.name = 'brows';
+  for (const s of [-1, 1]) brows.add(P(chunk(0.28, 0.075, 0.1, 127), S.twig, s * 0.19, 0.5, hf + 0.03, [0, 0, s * 0.42]));
+  h.add(brows);
+  const hat = new THREE.Group(); // dented tin bucket, worn at an angle
+  hat.name = 'hat';
+  hat.add(P(cyl(0.24, 0.31, 0.34, 6), S.tin, 0, 0.17, 0));
+  hat.add(P(cyl(0.37, 0.37, 0.05, 6), shade(S.tin, -0.12), 0, 0.02, 0));
+  hat.add(P(rock(0.15), S.head, 0.04, 0.35, 0.02, null, [1, 0.6, 1])); // snow cap
+  hat.position.set(0.03, hh - 0.01, -0.03);
+  hat.rotation.set(0.06, 0, -0.2);
+  h.add(hat);
+  g.add(h);
+  g.userData.height = Math.round(new THREE.Box3().setFromObject(h, true).max.y * 100) / 100; // top of the hat
+  return g;
+}
+
 // ------------------------------------------------------------------ Props
 const GIFT_COLORS = [['#E63946', '#F4C430'], ['#2D9C4A', '#F1EDE4'], ['#3E7CB1', '#F4C430'], ['#B5179E', '#F1EDE4'], ['#F4A261', '#E63946']];
 const giftMats = GIFT_COLORS.map(([c, ribbon]) => {
@@ -419,7 +550,7 @@ const giftMats = GIFT_COLORS.map(([c, ribbon]) => {
   ctx.fillStyle = ribbon; ctx.fillRect(25, 0, 14, 64); ctx.fillRect(0, 25, 64, 14);
   ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, 60, 60);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
-  return { mat: new THREE.MeshLambertMaterial({ map: t }), ribbon: flat(ribbon), color: c };
+  return { mat: toon({ map: t }), ribbon: flat(ribbon), color: c };
 });
 const giftGeo = box(0.5, 0.42, 0.5);
 const bowGeo = cone(0.1, 0.2, 4);
@@ -533,6 +664,81 @@ const ADDONS = {
     }
     pip(g, lv, lv >= 4 ? 2.25 : 1.85);
   },
+  jack_frost(g, lv) {
+    const h = g.getObjectByName('head'), hh = 0.58, F = FROST;
+    const HOT = glow(F.glow, 0.8), ICE = tone(F.ice), SNOW = tone(F.fur);
+    const both = (fn) => [-1, 1].flatMap(fn);
+    if (lv >= 2) { // Cold Snap: frost crystals on the shoulders + bigger glowing hair spikes
+      if (lv < 4) { // (at level 4 these grow into the wings)
+        g.add(fuse(both((s) => [shard(0.13, 0.42, HOT, s * 0.44, 0.62, -0.04, -0.15, -s * 1.05)]), HOT));
+        g.add(fuse(both((s) => [shard(0.09, 0.3, ICE, s * 0.42, 0.62, 0.16, 0.5, -s * 1.0), shard(0.09, 0.3, ICE, s * 0.4, 0.64, -0.24, -0.7, -s * 0.7)]), ICE));
+      }
+      h.add(fuse([shard(0.23, 0.95, HOT, 0, hh, 0, -0.55, 0), ...both((s) => [shard(0.18, 0.66, HOT, s * 0.25, hh, -0.02, -0.6, -s * 0.5)])], HOT));
+    }
+    if (lv >= 3) { // Blizzard: ice crown + a ring of ice shards circling him
+      h.getObjectByName('fringe').visible = false;
+      h.add(P(chunk(0.74, 0.09, 0.12, 111), '#DDF6FF', 0, hh + 0.08, 0.3));
+      const BRIGHT = glow('#BFF3FF', 0.9);
+      h.add(fuse([-2, -1, 0, 1, 2].map((i) => shard(0.075, i === 0 ? 0.36 : 0.25, BRIGHT, i * 0.16, hh + 0.1, 0.3, 0.15, -i * 0.12)), BRIGHT));
+      const ring = new THREE.Group();
+      ring.name = 'spin';
+      const octa = new THREE.OctahedronGeometry(0.11);
+      const flake = (i) => { const a = (i / 10) * Math.PI * 2; return part(octa, SNOW, Math.sin(a) * 0.84, i % 2 ? 0.1 : -0.1, Math.cos(a) * 0.84, [0.3, a, 0.4], [0.6, 1.8, 0.6]); };
+      ring.add(fuse([0, 2, 4, 6, 8].map(flake), SNOW), fuse([1, 3, 5, 7, 9].map(flake), HOT));
+      ring.position.y = 0.95;
+      g.add(ring);
+    }
+    if (lv >= 4) { // Polar Vortex: spinning vortex halo at his feet + ice-shard wings
+      const vortex = new THREE.Group();
+      vortex.name = 'spin';
+      const band = (r, t, y, tilt) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, t, 4, 12), HOT); m.rotation.set(Math.PI / 2 + tilt, 0, 0); m.position.y = y; return m; };
+      vortex.add(band(0.82, 0.05, 0, 0), band(0.62, 0.035, 0.16, 0.12));
+      vortex.add(fuse([0, 1, 2, 3].map((i) => { // swooshes so the spin is visible
+        const a = (i / 4) * Math.PI * 2;
+        return part(cone(0.08, 0.5, 4), SNOW, Math.sin(a) * 0.82, 0.06, Math.cos(a) * 0.82, [Math.PI / 2, 0, -a - Math.PI / 2 + 0.2], [1, 1, 0.5]);
+      }), SNOW));
+      vortex.position.y = 0.12;
+      g.add(vortex);
+      const wing = (s, k) => shard(0.2, 0.92 - k * 0.16, ICE, s * 0.22, 0.6, -0.36, -0.5, -s * (0.5 + k * 0.4), 0.35);
+      g.add(fuse(both((s) => [wing(s, 0), wing(s, 2)]), ICE), fuse(both((s) => [wing(s, 1)]), HOT));
+    }
+    pip(g, lv, 2.3);
+  },
+  snowman(g, lv) {
+    const h = g.getObjectByName('head'), ball = g.getObjectByName('ball'), hh = 0.56, hf = 0.33;
+    const ICE = tone('#A8E4F7'), HOT = glow('#8FDCFF', 0.7), SNOWM = tone(SNOW.ball);
+    const k = [1, 1.25, 1.35, 1.5][lv - 1]; // the ball grows every level but keeps touching the ground and his mittens
+    ball.scale.setScalar(k);
+    ball.position.set(0, 0.4 * k, 0.35 + 0.4 * k);
+    if (lv >= 2) { // Packed Snow: bigger ball, chunkier base, earmuffs
+      g.add(P(chunk(1.18, 0.3, 1.06, 131), SNOW.lump, 0, 0.15, 0));
+      h.add(fuse([-1, 1].map((s) => part(chunk(0.14, 0.3, 0.3, 132), tone('#3E7CB1'), s * 0.4, 0.3, 0)), tone('#3E7CB1')));
+      h.add(P(box(0.84, 0.07, 0.07), '#27467A', 0, 0.36, -0.34));
+    }
+    if (lv >= 3) { // Ice Core: faceted glowing ice ball, ice shards on the shoulders, icicle brows
+      ball.geometry = rock(0.4, 0);
+      ball.material = HOT;
+      g.add(fuse([-1, 1].flatMap((s) => [shard(0.11, 0.4, ICE, s * 0.36, 0.9, -0.04, -0.2, -s * 1.0), shard(0.08, 0.26, ICE, s * 0.36, 0.9, -0.22, -0.7, -s * 0.6)]), ICE));
+      g.add(fuse([-1, 1].map((s) => shard(0.08, 0.28, HOT, s * 0.36, 0.9, 0.12, 0.3, -s * 1.2)), HOT));
+      h.getObjectByName('brows').visible = false;
+      h.add(fuse([-1, 1].flatMap((s) => [
+        part(chunk(0.3, 0.085, 0.11, 133), ICE, s * 0.19, 0.5, hf + 0.03, [0, 0, s * 0.42]),
+        part(cone(0.035, 0.16, 4), ICE, s * 0.31, 0.47, hf + 0.05, [Math.PI, 0, 0]),
+        part(cone(0.03, 0.11, 4), ICE, s * 0.24, 0.46, hf + 0.06, [Math.PI, 0, 0]),
+      ]), ICE));
+    }
+    if (lv >= 4) { // Avalanche: enormous ball, ice crown instead of the bucket, snowballs orbiting his head
+      h.getObjectByName('hat').visible = false;
+      h.add(P(cyl(0.33, 0.36, 0.1, 6), '#DDF6FF', 0, hh + 0.04, 0));
+      h.add(fuse([0, 1, 2, 3, 4, 5].map((i) => { const a = (i / 6) * Math.PI * 2; return shard(0.09, i % 2 ? 0.3 : 0.44, HOT, Math.sin(a) * 0.27, hh + 0.06, Math.cos(a) * 0.27, Math.cos(a) * 0.3, -Math.sin(a) * 0.3); }), HOT));
+      const orbit = new THREE.Group();
+      orbit.name = 'spin';
+      orbit.add(fuse([0, 1, 2, 3, 4, 5].map((i) => { const a = (i / 6) * Math.PI * 2; return part(rock(i % 2 ? 0.09 : 0.12), SNOWM, Math.sin(a) * 0.74, i % 2 ? 0.06 : -0.06, Math.cos(a) * 0.74, [a, a * 2, 0]); }), SNOWM));
+      orbit.position.y = 1.46;
+      g.add(orbit);
+    }
+    pip(g, lv, lv >= 4 ? 2.35 : 2.2);
+  },
 };
 /** Character-style tower (or the grump) at a given upgrade level, 1..4. */
 export function spawnTower(name, level = 1) {
@@ -541,7 +747,7 @@ export function spawnTower(name, level = 1) {
   return m;
 }
 
-const BUILDERS = { santa, mrs_claus: mrsClaus, elf, reindeer: () => reindeer(false), evil_reindeer: () => reindeer(true), toy_soldier: toySoldier, coal_chucker: coalChucker, grump };
+const BUILDERS = { santa, mrs_claus: mrsClaus, elf, reindeer: () => reindeer(false), evil_reindeer: () => reindeer(true), toy_soldier: toySoldier, coal_chucker: coalChucker, grump, jack_frost: jackFrost, snowman };
 const cache = {};
 /** Returns a fresh instance (shared geometry + materials) of a named character. */
 export function spawnModel(name) {
